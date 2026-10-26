@@ -56,6 +56,33 @@ def test_trilingual_normalization() -> None:
     assert normalize_mileage_to_km("100,000 mi") == 160934
     assert normalize_mileage_to_km(85000, unit="miles") == 136794
 
+    # Verify MyAuto category_id=66 (Crossover/SUV) and model-based body style protection
+    assert normalize_body_style_text(66) == BodyStyle.SUV_CROSSOVER
+    juke = normalize_raw_listing_dict(
+        {
+            "car_id": 9901,
+            "man_name": "Nissan",
+            "model_name": "Juke",
+            "category_id": 66,
+            "drive_type_id": 3,
+            "price_usd": 4700,
+            "customs_passed": 1,
+        }
+    )
+    assert juke.body_style == BodyStyle.SUV_CROSSOVER
+    assert juke.drivetrain == Drivetrain.FOUR_WD
+
+    # Verify MyAutoSource builds Cats and DriveTypes query parameters
+    src = MyAutoSource()
+    q_params = src.build_query_params(
+        SearchFilterConfig(
+            body_styles=[BodyStyle.SUV_CROSSOVER],
+            drivetrains=[Drivetrain.AWD, Drivetrain.FOUR_WD],
+        )
+    )
+    assert q_params["Cats"] == "5.66"
+    assert q_params["DriveTypes"] == "3"
+
 
 @pytest.mark.asyncio
 async def test_myauto_source_live_and_cloudflare_challenge() -> None:

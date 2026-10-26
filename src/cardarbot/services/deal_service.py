@@ -85,8 +85,14 @@ def does_listing_match_filter(listing: NormalizedListing, filters: SearchFilterC
     if filters.body_styles and listing.body_style not in filters.body_styles:
         return False
 
-    if filters.drivetrains and listing.drivetrain not in filters.drivetrains:
-        return False
+    if filters.drivetrains:
+        allowed_drives = set(filters.drivetrains)
+        # MyAuto and most Georgian listings use a single 4x4/AWD category (drive_type_id=3),
+        # so selecting either AWD or 4WD matches both AWD and FOUR_WD vehicles.
+        if allowed_drives & {Drivetrain.AWD, Drivetrain.FOUR_WD}:
+            allowed_drives |= {Drivetrain.AWD, Drivetrain.FOUR_WD}
+        if listing.drivetrain not in allowed_drives:
+            return False
 
     if filters.off_road_preference == OffRoadPreference.AWD_4WD_REQUIRED:
         if listing.drivetrain not in {Drivetrain.AWD, Drivetrain.FOUR_WD}:
@@ -174,6 +180,11 @@ class DealService:
 
             for row, norm in upserted_rows:
                 spam_res = evaluate_listing_credibility(norm)
+                matches_profile = (
+                    profile is not None
+                    and not spam_res.is_rejected
+                    and does_listing_match_filter(norm, profile.filters)
+                )
                 valuation = select_comparables_and_estimate_value(
                     candidate=norm,
                     pool=clean_pool,
@@ -197,8 +208,8 @@ class DealService:
                 eval_domain = DealEvaluationDomain(
                     listing_id=row.id,
                     source_listing_id=norm.source_listing_id,
-                    matched_profile_id=profile.id if profile else None,
-                    matched_profile_name=profile.name if profile else None,
+                    matched_profile_id=profile.id if (profile and matches_profile) else None,
+                    matched_profile_name=profile.name if (profile and matches_profile) else None,
                     valuation=valuation,
                     profit=profit,
                     score=score,
