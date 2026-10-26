@@ -43,12 +43,16 @@ BOT_COMMANDS: list[BotCommand] = [
 
 
 async def post_init_setup(application: Application[Any, Any, Any, Any, Any, Any]) -> None:
-    """Register Telegram command descriptions on bot startup."""
+    """Register Telegram command descriptions and start background scheduler on bot startup."""
     try:
         await application.bot.set_my_commands(BOT_COMMANDS)
         logger.info("Registered %d Telegram bot commands.", len(BOT_COMMANDS))
     except Exception as exc:
         logger.warning("Could not set bot commands on startup: %s", exc)
+
+    scheduler = application.bot_data.get("scheduler")
+    if scheduler is not None:
+        scheduler.start(bot=application.bot)
 
 
 def create_bot_application(
