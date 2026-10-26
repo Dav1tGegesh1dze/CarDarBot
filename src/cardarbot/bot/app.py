@@ -66,14 +66,11 @@ def create_bot_application(
     app.bot_data["settings"] = settings
     app.bot_data["db"] = db
 
+    from cardarbot.bot.handlers.deals import register_deal_handlers
     from cardarbot.bot.handlers.searches import register_search_handlers
 
     register_search_handlers(app)
-
-    # Register additional feature modules if available
-    registrar = app.bot_data.get("register_deal_handlers")
-    if callable(registrar):
-        registrar(app)
+    register_deal_handlers(app)
 
     # Core command handlers
     app.add_handler(CommandHandler("start", start_command))
