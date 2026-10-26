@@ -31,16 +31,143 @@ MYAUTO_FUEL_MAP: dict[int, FuelType] = {
 }
 
 # MyAuto category_id / body style mapping
+# Verified against live api2.myauto.ge/ka/products:
+# 1 = Sedan, 2 = Hatchback, 3 = Wagon/Universal, 4 = Coupe,
+# 5 = SUV / Jeep, 6 = Convertible / Cabrio, 7 = Van / Microbus,
+# 29 = Pickup, 30 = Minivan, 66 = Crossover / SUV
 MYAUTO_BODY_MAP: dict[int, BodyStyle] = {
     1: BodyStyle.SEDAN,
     2: BodyStyle.HATCHBACK,
-    3: BodyStyle.COUPE,
-    4: BodyStyle.WAGON,
+    3: BodyStyle.WAGON,
+    4: BodyStyle.COUPE,
     5: BodyStyle.SUV_CROSSOVER,
-    6: BodyStyle.MINIVAN,
-    7: BodyStyle.CONVERTIBLE,
+    6: BodyStyle.CONVERTIBLE,
+    7: BodyStyle.VAN,
     29: BodyStyle.PICKUP,
-    30: BodyStyle.VAN,
+    30: BodyStyle.MINIVAN,
+    66: BodyStyle.SUV_CROSSOVER,
+}
+
+# Known SUV/Crossover models to guard against seller mis-categorization on MyAuto
+_KNOWN_SUV_MODELS: set[str] = {
+    "rav4",
+    "highlander",
+    "4runner",
+    "land cruiser",
+    "land cruiser prado",
+    "c-hr",
+    "x1",
+    "x3",
+    "x5",
+    "x6",
+    "gla",
+    "glc",
+    "gle",
+    "glk",
+    "ml",
+    "g-class",
+    "cr-v",
+    "hr-v",
+    "pilot",
+    "tucson",
+    "santa fe",
+    "kona",
+    "sportage",
+    "sorento",
+    "niro",
+    "rogue",
+    "x-trail",
+    "juke",
+    "murano",
+    "pathfinder",
+    "patrol",
+    "qashqai",
+    "tiguan",
+    "touareg",
+    "escape",
+    "explorer",
+    "ecosport",
+    "forester",
+    "outback",
+    "crosstrek",
+    "xv",
+    "xv crosstrek",
+    "rx",
+    "nx",
+    "gx",
+    "lx",
+    "outlander",
+    "outlander sport",
+    "asx",
+    "pajero",
+    "pajero io",
+    "montero",
+    "airtrek",
+    "equinox",
+    "trax",
+    "tahoe",
+    "suburban",
+    "cx-3",
+    "cx-5",
+    "cx-7",
+    "cx-9",
+    "cx-30",
+    "cx-50",
+    "q3",
+    "q5",
+    "q7",
+    "cayenne",
+    "macan",
+    "wrangler",
+    "grand cherokee",
+    "cherokee",
+    "compass",
+    "renegade",
+    "liberty",
+    "patriot",
+    "antara",
+    "encore",
+    "500x",
+    "countryman",
+    "paceman",
+    "2121 (niva)",
+    "niva",
+    "mountaineer",
+}
+
+# Known non-SUV passenger cars (sedans/hatchbacks) that should never be classified as SUV_CROSSOVER
+_KNOWN_SEDAN_OR_HATCH_MODELS: dict[str, BodyStyle] = {
+    "elantra": BodyStyle.SEDAN,
+    "sonata": BodyStyle.SEDAN,
+    "accent": BodyStyle.SEDAN,
+    "camry": BodyStyle.SEDAN,
+    "corolla": BodyStyle.SEDAN,
+    "prius": BodyStyle.HATCHBACK,
+    "aqua": BodyStyle.HATCHBACK,
+    "prius c": BodyStyle.HATCHBACK,
+    "vitz": BodyStyle.HATCHBACK,
+    "yaris": BodyStyle.HATCHBACK,
+    "fusion": BodyStyle.SEDAN,
+    "focus": BodyStyle.SEDAN,
+    "fiesta": BodyStyle.HATCHBACK,
+    "cruze": BodyStyle.SEDAN,
+    "volt": BodyStyle.HATCHBACK,
+    "malibu": BodyStyle.SEDAN,
+    "jetta": BodyStyle.SEDAN,
+    "passat": BodyStyle.SEDAN,
+    "cc": BodyStyle.SEDAN,
+    "golf": BodyStyle.HATCHBACK,
+    "civic": BodyStyle.SEDAN,
+    "accord": BodyStyle.SEDAN,
+    "fit": BodyStyle.HATCHBACK,
+    "insight": BodyStyle.HATCHBACK,
+    "tiida": BodyStyle.HATCHBACK,
+    "note": BodyStyle.HATCHBACK,
+    "leaf": BodyStyle.HATCHBACK,
+    "sentra": BodyStyle.SEDAN,
+    "altima": BodyStyle.SEDAN,
+    "mazda 3": BodyStyle.SEDAN,
+    "mazda 6": BodyStyle.SEDAN,
 }
 
 # MyAuto gear_type_id mapping
@@ -51,7 +178,7 @@ MYAUTO_GEAR_MAP: dict[int, Transmission] = {
     4: Transmission.CVT,  # Variator
 }
 
-# MyAuto drive_type_id mapping
+# MyAuto drive_type_id mapping (3 = 4x4/AWD on MyAuto)
 MYAUTO_DRIVE_MAP: dict[int, Drivetrain] = {
     1: Drivetrain.FWD,
     2: Drivetrain.RWD,
@@ -241,6 +368,28 @@ def normalize_location_text(raw: str | int | None) -> str | None:
     return str(raw).strip()
 
 
+def refine_body_style_with_model(
+    body_style: BodyStyle,
+    make: str | None,
+    model: str | None,
+) -> BodyStyle:
+    """Refine or correct body style using known vehicle model classifications."""
+    if not model:
+        return body_style
+    m_folded = model.strip().casefold()
+    # If model is a known SUV/Crossover and raw body style was OTHER, UNKNOWN, or mis-tagged
+    if m_folded in _KNOWN_SUV_MODELS:
+        return BodyStyle.SUV_CROSSOVER
+    # If model is a known sedan/hatchback, prevent it from ever being mislabeled as SUV_CROSSOVER
+    if m_folded in _KNOWN_SEDAN_OR_HATCH_MODELS and body_style in {
+        BodyStyle.SUV_CROSSOVER,
+        BodyStyle.OTHER,
+        BodyStyle.UNKNOWN,
+    }:
+        return _KNOWN_SEDAN_OR_HATCH_MODELS[m_folded]
+    return body_style
+
+
 def normalize_raw_listing_dict(
     raw: dict[str, Any],
     gel_to_usd: float = 0.3676,
@@ -272,8 +421,12 @@ def normalize_raw_listing_dict(
     fuel = normalize_fuel_text(raw.get("fuel") or raw.get("fuel_type_id") or raw.get("fuel_type"))
     powertrain = str(raw.get("powertrain") or derive_powertrain_from_fuel(fuel))
 
-    body_style = normalize_body_style_text(
-        raw.get("body_style") or raw.get("category_id") or raw.get("body")
+    body_style = refine_body_style_with_model(
+        normalize_body_style_text(
+            raw.get("body_style") or raw.get("category_id") or raw.get("body")
+        ),
+        make=make,
+        model=model,
     )
     drivetrain = normalize_drivetrain_text(
         raw.get("drivetrain") or raw.get("drive_type_id") or raw.get("drive")

@@ -88,6 +88,7 @@ class SearchService:
 
         deals_found = 0
         alerts_sent = 0
+        matching_candidates = 0
         max_alerts = self.settings.max_alerts_per_scan
 
         with self.db.session() as session:
@@ -98,12 +99,14 @@ class SearchService:
                 max_alerts = user_settings.max_alerts_per_scan
 
         for listing_row, eval_domain in evaluated:
+            if listing_row.is_spam_or_rejected or eval_domain.score.hard_rejected:
+                continue
             norm_cand = listing_model_to_domain(listing_row)
             if not does_listing_match_filter(norm_cand, profile.filters):
                 continue
+            matching_candidates += 1
             if (
-                not eval_domain.score.hard_rejected
-                and eval_domain.score.total_score >= profile.filters.min_deal_score
+                eval_domain.score.total_score >= profile.filters.min_deal_score
                 and (eval_domain.profit.net_profit_usd or 0.0) >= profile.filters.min_profit_usd
             ):
                 deals_found += 1
@@ -129,7 +132,7 @@ class SearchService:
             d_repo.finish_scan_job(
                 job_id=job_id,
                 status="completed",
-                listings_fetched=len(candidates),
+                listings_fetched=matching_candidates,
                 deals_found=deals_found,
                 alerts_sent=alerts_sent,
                 error_message=fetch_res.error_message,
@@ -138,7 +141,7 @@ class SearchService:
         return {
             "profile_name": profile.name,
             "source_mode": fetch_res.status_mode.value,
-            "candidates_evaluated": len(candidates),
+            "candidates_evaluated": matching_candidates,
             "deals_found": deals_found,
             "alerts_sent": alerts_sent,
             "source_note": fetch_res.error_message,

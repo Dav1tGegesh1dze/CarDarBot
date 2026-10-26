@@ -19,9 +19,17 @@ from cardarbot.bot.callbacks import CB_MAIN_MENU
 from cardarbot.bot.handlers.core import _ensure_user_and_settings
 from cardarbot.bot.keyboards import build_back_to_main_keyboard
 from cardarbot.database.models import DealEvaluationModel, ListingModel
-from cardarbot.database.repositories import DealRepository, ListingRepository
+from cardarbot.database.repositories import (
+    DealRepository,
+    ListingRepository,
+    SearchProfileRepository,
+)
 from cardarbot.database.session import DatabaseManager
-from cardarbot.services.deal_service import DealService
+from cardarbot.services.deal_service import (
+    DealService,
+    does_listing_match_filter,
+    listing_model_to_domain,
+)
 from cardarbot.sources.import_adapter import ListingImportAdapter
 from cardarbot.utils.logging import format_tbilisi_time
 
@@ -35,6 +43,7 @@ def _build_deals_menu_keyboard(
     page: int = 0,
     total_count: int = 0,
     listing_rows: list[tuple[ListingModel, DealEvaluationModel | None]] | None = None,
+    profile_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [
@@ -67,13 +76,19 @@ def _build_deals_menu_keyboard(
 
     nav_row: list[InlineKeyboardButton] = []
     if page > 0:
-        nav_row.append(
-            InlineKeyboardButton("⬅️ Prev", callback_data=f"deal:browse:{current_mode}:{page - 1}")
+        prev_cb = (
+            f"deal:profile:{profile_id}:{page - 1}"
+            if profile_id is not None
+            else f"deal:browse:{current_mode}:{page - 1}"
         )
+        nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=prev_cb))
     if (page + 1) * PAGE_SIZE < total_count:
-        nav_row.append(
-            InlineKeyboardButton("Next ➡️", callback_data=f"deal:browse:{current_mode}:{page + 1}")
+        next_cb = (
+            f"deal:profile:{profile_id}:{page + 1}"
+            if profile_id is not None
+            else f"deal:browse:{current_mode}:{page + 1}"
         )
+        nav_row.append(InlineKeyboardButton("Next ➡️", callback_data=next_cb))
     if nav_row:
         rows.append(nav_row)
 
@@ -91,8 +106,21 @@ def _query_deals_for_mode(
     """Query clean listings and their latest evaluations according to the requested browse mode."""
     with db.session() as session:
         d_repo = DealRepository(session)
+        p_repo = SearchProfileRepository(session)
         saved_ids = set(d_repo.list_saved_listing_ids(user_id))
         dismissed_ids = set(d_repo.list_dismissed_listing_ids(user_id))
+
+        target_profile = (
+            p_repo.get_profile(profile_id, user_id=user_id) if profile_id is not None else None
+        )
+        if profile_id is not None and target_profile is None:
+            return [], 0
+
+        active_profiles = (
+            [p for p in p_repo.list_user_profiles(user_id) if p.is_active]
+            if profile_id is None and mode not in {"saved", "dismissed"}
+            else []
+        )
 
         stmt = select(ListingModel).where(ListingModel.is_spam_or_rejected.is_(False))
         all_listings = list(session.execute(stmt).scalars().all())
@@ -107,8 +135,19 @@ def _query_deals_for_mode(
                 continue
 
             ev_row, _ = d_repo.get_latest_evaluation(l_row.id)
-            if profile_id is not None and (ev_row is None or ev_row.profile_id != profile_id):
+            if mode not in {"saved", "dismissed"} and ev_row is not None and ev_row.hard_rejected:
                 continue
+
+            domain_listing = listing_model_to_domain(l_row)
+
+            if target_profile is not None:
+                if not does_listing_match_filter(domain_listing, target_profile.filters):
+                    continue
+            elif active_profiles and not any(
+                does_listing_match_filter(domain_listing, p.filters) for p in active_profiles
+            ):
+                continue
+
             paired.append((l_row, ev_row))
 
         if mode == "score":
@@ -217,18 +256,24 @@ async def deal_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     if action == "profile":
         profile_id = int(parts[2])
         page = int(parts[3])
+        with db.session() as session:
+            p_repo = SearchProfileRepository(session)
+            prof = p_repo.get_profile(profile_id, user_id=user_id)
+        prof_title = prof.name if prof else f"Profile #{profile_id}"
         items, total = _query_deals_for_mode(
             db, user_id, mode="score", page=page, profile_id=profile_id
         )
-        text = f"💎 **Results for Search Profile #{profile_id}** (Total: {total})\n\n" + (
+        text = f"💎 **Results for {prof_title}** (Page {page + 1}, Matching: {total})\n\n" + (
             "Select a listing below:"
             if items
-            else "No matching deals evaluated for this profile yet."
+            else "No matching vehicles found for this search filter yet. Tap **▶️ Run Now** on the search profile to scan!"
         )
         await query.answer()
         await query.edit_message_text(
             text=text,
-            reply_markup=_build_deals_menu_keyboard("score", page, total, items),
+            reply_markup=_build_deals_menu_keyboard(
+                "score", page, total, items, profile_id=profile_id
+            ),
         )
         return
 

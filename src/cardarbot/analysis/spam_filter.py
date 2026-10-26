@@ -54,9 +54,15 @@ _REJECTION_RULES: list[tuple[tuple[str, ...], str, str]] = [
     (
         (
             "ძრავის პრობლემა",
+            "ძრავს აქვს პრობლემა",
+            "ძრავზე აქვს პრობლემა",
+            "პრობლემა აქვს ძრავს",
             "ძრავი დასტუკულია",
             "დასტუკული",
             "ძრავი არ ვარგა",
+            "მ.ატორს აქვს ხმა",
+            "მატორს აქვს ხმა",
+            "მატორი სტუკზეა",
             "engine problem",
             "blown engine",
             "seized engine",
@@ -72,6 +78,14 @@ _REJECTION_RULES: list[tuple[tuple[str, ...], str, str]] = [
             "კოლოფის პრობლემა",
             "კარობკის პრობლემა",
             "გადაცემათა კოლოფის პრობლემა",
+            "პრობლემა აქვს გადაცემათა კოლოფს",
+            "გადაცემათა კოლოფს აქვს პრობლემა",
+            "კოლოფს აქვს პრობლემა",
+            "კარობკას აქვს პრობლემა",
+            "დაზიანებული სიჩქარეების გადამრთველი",
+            "დაზიანებული კოლოფი",
+            "დაზიანებული გადაცემათა კოლოფი",
+            "პერვიჩნი",
             "gearbox problem",
             "transmission problem",
             "bad transmission",
@@ -85,7 +99,9 @@ _REJECTION_RULES: list[tuple[tuple[str, ...], str, str]] = [
     (
         (
             "პირველი შენატანი",
+            "პირველადი შენატანი",
             "წინასწარი შენატანი",
+            "წინასწარი შემოსატანი",
             "საწყისი შენატანი",
             "down payment",
             "down-payment",
@@ -93,18 +109,34 @@ _REJECTION_RULES: list[tuple[tuple[str, ...], str, str]] = [
             "первый взнос",
             "первоначальный взнос",
         ),
-        "Advertised price is down-payment only (პირველი შენატანი / down payment)",
+        "Advertised price is down-payment only (წინასწარი შენატანი / down payment)",
         "down_payment_only",
     ),
     (
         (
+            "ლომბარდშია",
+            "ლომბარდში",
+            "ლომბარდი",
+            "ლომბარდს",
+            "გადმოგაბარებთ",
+            "გადაიბარეთ",
+            "გადაბარებით",
+            "სესხის გადაბარება",
+            "ბანკის გადაბარება",
+            "ხელზე მომეცით",
+            "ხელზე მინდა",
             "მხოლოდ განვადებით",
+            "მხოლოდ ლიზინგით",
+            "თი ჯი ლიზინგ",
+            "ლიზინგის საშუალებით",
             "ლიზინგის გადაბარება",
             "financing only",
-            "lease takeover only",
+            "lease takeover",
+            "loan takeover",
             "только в рассрочку",
+            "в ломбарде",
         ),
-        "Financing or lease-takeover-only price (განვადება / financing only)",
+        "Lombard, bank loan takeover, or leasing-only price (ლომბარდი / გადაბარება / ხელზე)",
         "financing_only",
     ),
     (
@@ -112,21 +144,42 @@ _REJECTION_RULES: list[tuple[tuple[str, ...], str, str]] = [
             "მძიმე დაზიანებით",
             "ნაავარიები",
             "ჩაძირული",
+            "დასეტყვილი",
             "major collision",
             "frame damage",
             "flood damage",
+            "hail damage",
             "total loss",
             "тотал",
             "утопленник",
             "сильно битый",
         ),
-        "Major collision, frame, or flood damage reported",
+        "Major collision, frame, flood, or hail damage reported",
         "major_collision_damage",
     ),
 ]
 
+# Flexible regex patterns for Georgian engine/gearbox/down-payment/lombard phrasings
+_ENGINE_PROBLEM_RE = re.compile(
+    r"(?:ძრავ\w*|მატორ\w*)\s+(?:\w+\s+){0,2}პრობლემ|პრობლემ\w*\s+(?:\w+\s+){0,2}(?:ძრავ\w*|მატორ\w*)",
+    re.IGNORECASE,
+)
+_GEARBOX_PROBLEM_RE = re.compile(
+    r"(?:კოლოფ\w*|კარობკ\w*)\s+(?:\w+\s+){0,2}პრობლემ|პრობლემ\w*\s+(?:\w+\s+){0,3}(?:კოლოფ\w*|კარობკ\w*)",
+    re.IGNORECASE,
+)
+_DOWN_PAYMENT_PCT_RE = re.compile(
+    r"(?:შენატანი|შემოსატანი|თანამონაწილეობა)\s*\d+\s*%|(?:\b\d{1,2}\s*%\s*-?\s*დან\b)",
+    re.IGNORECASE,
+)
+_CASH_IN_HAND_LOAN_RE = re.compile(
+    r"(?:ხელზე\s*(?:\d+|მომეცით|მინდა)|(?:\d+\s*\$?\s*ხელზე))",
+    re.IGNORECASE,
+)
+
 _CONFLICTING_PRICE_RE = re.compile(
-    r"(?:რეალური ფასი|სრული ფასი|ფასი არის|real price|full price|actual price)\s*[:=-]?\s*\$?\s*(\d{4,6})",
+    r"(?:რეალური ფასი|სრული ფასი|ფასი არის|იქნება ფასი|გავატან|real price|full price|actual price)\s*[:=-]?\s*\$?\s*(\d{4,6})|"
+    r"(\d{4,6})\s*\$\s*(?:გავატან|იქნება ფასი|არის ფასი|სრული ფასი)",
     re.IGNORECASE,
 )
 
@@ -171,16 +224,37 @@ def evaluate_listing_credibility(listing: NormalizedListing) -> SpamFilterResult
             reasons.append(reason_text)
             indicators[indicator_key] = True
 
+    # 2b. Flexible regex checks for Georgian word order variations
+    if desc:
+        if "engine_problem" not in indicators and _ENGINE_PROBLEM_RE.search(desc):
+            reasons.append("Major engine problem reported in description (ძრავის პრობლემა)")
+            indicators["engine_problem"] = True
+        if "gearbox_problem" not in indicators and _GEARBOX_PROBLEM_RE.search(desc):
+            reasons.append(
+                "Major gearbox/transmission problem reported in description (კოლოფის პრობლემა)"
+            )
+            indicators["gearbox_problem"] = True
+        if "down_payment_only" not in indicators and _DOWN_PAYMENT_PCT_RE.search(desc):
+            reasons.append("Advertised price is percentage down-payment / financing offer")
+            indicators["down_payment_only"] = True
+        if "financing_only" not in indicators and _CASH_IN_HAND_LOAN_RE.search(desc):
+            reasons.append(
+                "Advertised price is partial cash-in-hand (ხელზე) with loan/lombard balance"
+            )
+            indicators["financing_only"] = True
+
     # 3. Check for conflicting prices in description vs advertised USD price
     if listing.usd_price is not None and desc:
         m_conflict = _CONFLICTING_PRICE_RE.search(desc)
         if m_conflict:
-            mentioned_price = float(m_conflict.group(1))
-            if abs(mentioned_price - listing.usd_price) >= 800.0:
-                reasons.append(
-                    f"Conflicting price in description (${mentioned_price:,.0f}) vs advertised (${listing.usd_price:,.0f})"
-                )
-                indicators["conflicting_price"] = True
+            raw_num = m_conflict.group(1) or m_conflict.group(2)
+            if raw_num:
+                mentioned_price = float(raw_num)
+                if abs(mentioned_price - listing.usd_price) >= 800.0:
+                    reasons.append(
+                        f"Conflicting price in description (${mentioned_price:,.0f}) vs advertised (${listing.usd_price:,.0f})"
+                    )
+                    indicators["conflicting_price"] = True
 
     # 4. Non-fatal condition & context indicators (never reject urgent sale alone)
     if any(k in folded for k in ("სასწრაფოდ", "urgent", "срочно")):

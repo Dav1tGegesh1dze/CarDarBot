@@ -79,6 +79,36 @@ def test_spam_and_georgian_text_filtering() -> None:
     assert r6.is_rejected is False
     assert r6.condition_indicators.get("urgent_sale") is True
 
+    # 7. Lombard / bank loan takeover / cash-in-hand (ხელზე) with conflicting real price
+    p7 = _make_listing(
+        "107",
+        price=2233.0,
+        desc="6000$ გავატან ვინც დღეს ხვალ წაიყვანს 4000 ლომბარდშია თუგინდათ გადაიბარეთ და 1800 ხელზე მომეცით",
+    )
+    r7 = evaluate_listing_credibility(p7)
+    assert r7.is_rejected is True
+    assert r7.condition_indicators.get("financing_only") is True
+    assert r7.condition_indicators.get("conflicting_price") is True
+
+    # 8. Percentage down-payment / bank repossession (წინასწარი შემოსატანი 10% დან)
+    p8 = _make_listing(
+        "108",
+        price=3800.0,
+        desc="წინასწარი შემოსატანი 10% დან ავტომობილის რეალიზაციას ახდენს სს. ლიბერთი ბანკი",
+    )
+    r8 = evaluate_listing_credibility(p8)
+    assert r8.is_rejected is True
+    assert r8.condition_indicators.get("down_payment_only") is True
+
+    # 9. Flexible Georgian word order for engine & gearbox problems
+    p9 = _make_listing(
+        "109", price=3700.0, desc="პრობლემა აქვს გადაცემათა კოლოფს, ძრავს აქვს პრობლემა"
+    )
+    r9 = evaluate_listing_credibility(p9)
+    assert r9.is_rejected is True
+    assert r9.condition_indicators.get("engine_problem") is True
+    assert r9.condition_indicators.get("gearbox_problem") is True
+
 
 def test_comparable_selection_profit_and_scoring() -> None:
     candidate = _make_listing("cand1", price=3200.0, year=2013, mileage=155000)
