@@ -104,7 +104,7 @@ You will see the welcome screen and interactive main menu (`🔎 Create Search`,
   and tap **✅ Save and Activate**.
 
 ### 10. Test listing import, evaluation & notifications
-Because MyAuto.ge enforces Cloudflare Turnstile challenges on automated scripts, you can import a JSON/CSV/HTML batch of listings via CLI or by dragging and dropping a `.json` or `.csv` file directly into the Telegram chat with `@CarDar_Georgia_bot`:
+MyAuto.ge can answer automated requests with a Cloudflare Turnstile challenge (see the note on cloud servers in step 11). When live scans are unavailable, you can import a JSON/CSV/HTML batch of listings via CLI or by dragging and dropping a `.json` or `.csv` file directly into the Telegram chat with `@CarDar_Georgia_bot`:
 ```bash
 # Optional CLI import & immediate scan test:
 .venv/bin/cardarbot import-file path/to/myauto_export.json
@@ -117,6 +117,8 @@ When you explicitly want CarDarBot to run automatically in the background on you
 ./scripts/install_mac.sh --install-launchd
 ```
 > **Note on macOS Power & Sleep Limitations**: Because CarDarBot runs locally on your Mac without paid cloud hosting, scheduled scans and Telegram polling run while your Mac is powered on and awake. If your Mac is asleep or powered off at a scheduled interval, `ScanScheduler` and `launchd` will automatically catch up on due profile scans as soon as your Mac wakes up.
+
+> **Note on Cloud Servers**: Live MyAuto.ge scans depend on where the bot runs. From a home internet connection in Georgia, the MyAuto API answers the bot normally and `/status` reports `live`. From a cloud data centre it does not: tested on 2026-11-15 from an Oracle Cloud server in Frankfurt, every request received a Cloudflare challenge (`HTTP 403`, `cf-mitigated: challenge`), so the bot can only work from imported files there. CarDarBot never bypasses these protections, so run it on a machine with a home connection.
 
 ### 12. Check operational logs
 ```bash
