@@ -104,7 +104,7 @@ You will see the welcome screen and interactive main menu (`🔎 Create Search`,
   and tap **✅ Save and Activate**.
 
 ### 10. Test listing import, evaluation & notifications
-MyAuto.ge can answer automated requests with a Cloudflare Turnstile challenge (see the note on cloud servers in step 11). When live scans are unavailable, you can import a JSON/CSV/HTML batch of listings via CLI or by dragging and dropping a `.json` or `.csv` file directly into the Telegram chat with `@CarDar_Georgia_bot`:
+MyAuto.ge can answer automated requests with a Cloudflare Turnstile challenge (see the note on the Python build in the Linux server section). When live scans are unavailable, you can import a JSON/CSV/HTML batch of listings via CLI or by dragging and dropping a `.json` or `.csv` file directly into the Telegram chat with `@CarDar_Georgia_bot`:
 ```bash
 # Optional CLI import & immediate scan test:
 .venv/bin/cardarbot import-file path/to/myauto_export.json
@@ -116,9 +116,7 @@ When you explicitly want CarDarBot to run automatically in the background on you
 ```bash
 ./scripts/install_mac.sh --install-launchd
 ```
-> **Note on macOS Power & Sleep Limitations**: Because CarDarBot runs locally on your Mac without paid cloud hosting, scheduled scans and Telegram polling run while your Mac is powered on and awake. If your Mac is asleep or powered off at a scheduled interval, `ScanScheduler` and `launchd` will automatically catch up on due profile scans as soon as your Mac wakes up.
-
-> **Note on Cloud Servers**: Live MyAuto.ge scans depend on where the bot runs. From a home internet connection in Georgia, the MyAuto API answers the bot normally and `/status` reports `live`. From a cloud data centre it does not: tested on 2026-11-15 from an Oracle Cloud server in Frankfurt, every request received a Cloudflare challenge (`HTTP 403`, `cf-mitigated: challenge`), so the bot can only work from imported files there. CarDarBot never bypasses these protections, so run it on a machine with a home connection.
+> **Note on macOS Power & Sleep Limitations**: On a Mac, scheduled scans and Telegram polling only run while the Mac is powered on and awake. After it wakes, `ScanScheduler` runs overdue profile scans at one of its next half-hourly checks, so the Mac has to stay awake for up to an hour to catch up. To keep scanning around the clock, run the bot on a Linux server instead (see below).
 
 ### 12. Check operational logs
 ```bash
@@ -147,6 +145,46 @@ git pull origin main
 ```bash
 ./scripts/uninstall_mac.sh
 ```
+
+---
+
+## 🐧 Running on a Linux Server (systemd)
+
+A server keeps CarDarBot scanning around the clock, which a laptop cannot do while it sleeps. Tested on Ubuntu 24.04 (arm64).
+
+```bash
+# 1. Install uv system-wide; it supplies the Python build the bot runs on
+curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin sh
+
+# 2. Clone and set up: creates the `cardarbot` system user, `.venv`, `.env` and the database
+sudo git clone https://github.com/Dav1tGegesh1dze/CarDarBot.git /opt/cardarbot
+cd /opt/cardarbot
+sudo ./scripts/install_linux.sh
+
+# 3. Add your TELEGRAM_BOT_TOKEN and TELEGRAM_ALLOWED_USER_IDS
+sudo nano .env
+
+# 4. Install and start the systemd service (starts at boot, restarts after a crash)
+sudo ./scripts/install_linux.sh --install-systemd
+```
+
+Day-to-day commands:
+
+```bash
+systemctl status cardarbot                  # is it running?
+sudo journalctl -u cardarbot -n 50          # recent log
+sudo systemctl restart cardarbot            # restart
+sudo systemctl disable --now cardarbot      # stop and remove from boot
+
+# Update to the latest version
+cd /opt/cardarbot
+sudo -u cardarbot git pull origin main
+sudo ./scripts/install_linux.sh --install-systemd
+```
+
+> **One copy per bot token**: Telegram delivers updates to a single poller, so stop the bot on your Mac before starting it on a server. To keep your searches and history, copy `data/cardarbot.db` and `.env` across while both copies are stopped.
+
+> **Note on the Python build**: `install_linux.sh` runs the bot on uv's own Python 3.12 and never on the distribution's `python3`. Tested on 2026-11-16 from one cloud server, MyAuto.ge answered uv's Python 3.12.16 (OpenSSL 3.5) normally, while every request from Ubuntu 24.04's system Python 3.12.3 (OpenSSL 3.0) received a Cloudflare challenge (`HTTP 403`, `cf-mitigated: challenge`). If MyAuto.ge challenges the bot anyway, `/status` reports it and scans fall back to imported and stored listings; the bot never tries to solve or evade a challenge.
 
 ---
 
