@@ -80,6 +80,7 @@ class ScanFrequency(StrEnum):
     DAILY = "daily"
     EVERY_12_HOURS = "every_12_hours"
     EVERY_6_HOURS = "every_6_hours"
+    EVERY_2_HOURS = "every_2_hours"
     MANUAL_ONLY = "manual_only"
 
 

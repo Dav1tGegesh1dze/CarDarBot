@@ -23,7 +23,7 @@
   13. Customs status (`Customs-cleared only`, `Include uncleared`, `Any` — unknown status is never treated as cleared)
   14. Minimum expected net profit (default `$500`)
   15. Deal score threshold (default `70/100`)
-  16. Scan frequency (`Daily`, `Every 12 hours`, `Every 6 hours`, `Manual only`)
+  16. Scan frequency (`Daily`, `Every 12 hours`, `Every 6 hours`, `Every 2 hours`, `Manual only`)
   17. Complete confirmation summary before persistence
 - **Natural Language Search**: Send messages like `"Find Toyota Prius under $4000"`, `"Electric cars under $5000"`, `"BMW coupe 2012-2018"`, or `"Find 4x4 under $3000"` to generate a draft search configuration.
 - **MyAuto.ge & Import Architecture**:

@@ -64,6 +64,25 @@ def test_is_profile_due_for_scan() -> None:
     assert is_profile_due_for_scan(p_manual, now=now) is False
 
 
+def test_every_two_hours_is_due_at_the_next_tick() -> None:
+    now = datetime.now(UTC)
+    profile = SearchProfileDomain(
+        id=3,
+        user_id=1,
+        name="Two-hourly Search",
+        is_active=True,
+        filters=SearchFilterConfig(scan_frequency=ScanFrequency.EVERY_2_HOURS),
+        last_scanned_at=now - timedelta(hours=1),
+    )
+    assert is_profile_due_for_scan(profile, now=now) is False
+
+    # The previous scan finished a few seconds after its tick: still due two hours on.
+    finished_late = profile.model_copy(
+        update={"last_scanned_at": now - timedelta(hours=2) + timedelta(seconds=4)}
+    )
+    assert is_profile_due_for_scan(finished_late, now=now) is True
+
+
 @pytest.mark.asyncio
 async def test_scan_scheduler_tick_and_lifecycle() -> None:
     db = DatabaseManager("sqlite:///:memory:")

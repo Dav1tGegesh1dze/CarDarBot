@@ -25,7 +25,13 @@ FREQUENCY_HOURS_MAP: dict[ScanFrequency, int] = {
     ScanFrequency.DAILY: 24,
     ScanFrequency.EVERY_12_HOURS: 12,
     ScanFrequency.EVERY_6_HOURS: 6,
+    ScanFrequency.EVERY_2_HOURS: 2,
 }
+
+# A scan finishes a few seconds after the scheduler tick that started it, so the
+# tick one interval later finds slightly less than a full interval elapsed. Without
+# this slack every scan would slip to the following tick, 30 minutes late.
+SCHEDULE_SLACK = timedelta(minutes=5)
 
 
 class ProcessLock:
@@ -73,7 +79,7 @@ def is_profile_due_for_scan(profile: SearchProfileDomain, now: datetime | None =
         else profile.last_scanned_at.replace(tzinfo=UTC)
     )
     interval_hours = FREQUENCY_HOURS_MAP.get(profile.filters.scan_frequency, 24)
-    return (now_utc - last_utc) >= timedelta(hours=interval_hours)
+    return (now_utc - last_utc) >= timedelta(hours=interval_hours) - SCHEDULE_SLACK
 
 
 class ScanScheduler:

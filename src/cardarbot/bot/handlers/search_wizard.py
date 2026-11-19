@@ -630,6 +630,11 @@ async def render_step_16_frequency(update: Update, context: ContextTypes.DEFAULT
         ],
         [
             InlineKeyboardButton(
+                "🕑 Every 2 hours", callback_data=f"wiz:freq:{ScanFrequency.EVERY_2_HOURS.value}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 "🖐️ Manual only", callback_data=f"wiz:freq:{ScanFrequency.MANUAL_ONLY.value}"
             )
         ],
