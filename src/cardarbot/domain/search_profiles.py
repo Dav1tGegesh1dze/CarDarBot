@@ -136,6 +136,7 @@ class SearchFilterConfig(BaseModel):
             ScanFrequency.DAILY: "Daily",
             ScanFrequency.EVERY_12_HOURS: "Every 12 hours",
             ScanFrequency.EVERY_6_HOURS: "Every 6 hours",
+            ScanFrequency.EVERY_2_HOURS: "Every 2 hours",
             ScanFrequency.MANUAL_ONLY: "Manual only",
         }
 
